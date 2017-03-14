@@ -1,0 +1,65 @@
+import unittest
+from unittest.mock import patch, Mock
+
+from emailshunter import hunter
+
+
+@patch("emailshunter.hunter.requests.get") 
+class GetResourceTest(unittest.TestCase):
+
+    def test_for_calling_request_method_with_correct_uri(self, get_mock):
+        resource = hunter.get_resource(uri="http://localhost")
+        args = get_mock.call_args[0] # positional arguments
+        self.assertEqual(args[0], "http://localhost")
+
+    def test_for_calling_raise_for_status_when_not_200(self, get_mock):
+        get_mock.return_value.status_code = 404
+        resource = hunter.get_resource("http://localhost")
+        self.assertTrue(get_mock.return_value.raise_for_status.called)
+
+    def test_for_returning_content_of_response(self, get_mock):
+        resp = Mock()
+        resp.status_code = 200
+        resp.content = b"<html></html>"
+        get_mock.return_value = resp
+        resource = hunter.get_resource("fake_uri")
+        self.assertEqual(resource, resp.content)
+
+
+class FindWithReTest(unittest.TestCase):
+
+    def test_for_finding_email_addresses(self):
+        content = "BlaBla test@test.com amazing 'admin@test.com'"
+        emails = list(hunter.find_with_re(content, hunter.RE_EMAIL))
+        self.assertEqual(len(emails), 2)
+        self.assertEqual(emails[0], "test@test.com")
+        self.assertEqual(emails[1], "admin@test.com")
+
+    def test_for_finding_urls(self):
+        content = """"
+        This page 'http://www.awesome.com' is awesome. But this one
+        www.notawesome.pl is not.
+         """
+        urls = list(hunter.find_with_re(content, hunter.RE_URL))
+        self.assertEqual(len(urls), 2)
+        self.assertEqual(urls[0], "http://www.awesome.com")
+
+    def test_for_finding_urls_with_bs(self):
+        content = """
+        <html><head><title>Test Page</title></head>
+        <body>
+            <h1>My Favourite Web Pages</h1>
+            <ul>
+                <li><a href="http://www.google.com">Google</a></li>
+                <li><a>No Href</a></li>
+                <li><a href="www.sport.com">Sport</a></li>
+            </ul>
+        </body>
+
+        """
+        urls = list(hunter.find_with_bs(content, tag="a", attr="href"))
+        self.assertEqual(len(urls), 3)
+        self.assertCountEqual(["http://www.google.com", None, "www.sport.com"],
+                              urls)
+
+
