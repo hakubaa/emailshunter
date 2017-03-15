@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Test Page{% endblock %}
+
+{% block body %}
+    <h1>Home Page</h1>
+    <div>
+        <h3>Fakes</h3>
+        <ul>
+            {% for fake_url in fakes %}
+                <li><a href="{{ url_for('main.fake', name=fake_url) }}"> {{ fake_url }}</a></li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div>
+        <h3>Favourite Links</h3>
+        <ul>
+            <li>http://googles.com</li>
+            <li>https://test.com</li>
+            <li><a href="http://www.info.news">Info-News</a></li>
+            <li><a href="http://blog.revolutionanalytics.com/">Revolution Analytics</a></li>
+        </ul>
+    </div>
+{% endblock %}
