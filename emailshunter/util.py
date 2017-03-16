@@ -1,4 +1,10 @@
 import re
+import urllib.parse as urlparse
+import imp
+import importlib
+import sys
+import inspect
+import ctypes
 
 import requests
 from bs4 import BeautifulSoup
@@ -37,3 +43,35 @@ def filter_with_re(iterable, pattern=None):
         return iterable
     rpattern = re.compile(pattern)
     return (item for item in iterable if rpattern.match(item))
+
+
+def url_fix(s, charset='utf-8'):
+    """Fix url."""
+    if isinstance(s, bytes):
+        s = s.decode(charset, 'ignore')
+    scheme, netloc, path, qs, anchor = urlparse.urlsplit(s)
+    path = urlparse.quote(path, '/%')
+    qs = urlparse.quote_plus(qs, ':&=')
+    return urlparse.urlunsplit((scheme, netloc, path, qs, anchor))
+
+
+def load_module(name, attach = False, force_reload = True):
+    '''Load dynamically module.'''
+    if name in sys.modules and force_reload:
+        module = imp.reload(sys.modules[name])
+    else:
+        module = importlib.import_module(name)
+    if attach:
+        calling_frame = inspect.stack()[1][0]
+        calling_frame.f_locals.update(
+            { attr: getattr(module, attr) for attr in dir(module) 
+                                          if not attr.startswith("_") }
+        )
+        ctypes.pythonapi.PyFrame_LocalsToFast(
+                ctypes.py_object(calling_frame), ctypes.c_int(0))
+    return module
+
+
+def fmap(item, *args):
+    '''Applies each func in args to item, yielding the result.'''
+    return (f(item) for f in args)

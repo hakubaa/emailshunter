@@ -18,10 +18,3 @@ class WebsiteTest(WebsiteTestCase):
         self.assertEqual(response.status_code, 200)
         content = response.data.decode("utf-8")
         self.assertIn("Test Page", content)
-
-
-class UtilWithWebsiteTest(WebsiteTestCase):
-
-    def test_get_resource_returns_webpage(self):
-        content = util.get_resource("http://localhost:5000/test")
-        self.assertIn("Test Page", content.decode("utf-8"))
