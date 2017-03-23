@@ -13,6 +13,16 @@
         </ul>
     </div>
     <div>
+        <h3>Fakes with queries</h3>
+        <ul>
+            {% for fake_url in fakes %}
+                <li><a href="{{ url_for('main.fake', name=fake_url) }}?name={{fake_url}}"> 
+                    {{ fake_url }}
+                </a></li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div>
         <h3>Favourite Links</h3>
         <ul>
             <li>http://googles.com</li>

@@ -23,7 +23,7 @@ class GetResourceTest(unittest.TestCase):
         resp.content = b"<html></html>"
         get_mock.return_value = resp
         resource = util.get_resource("fake_uri")
-        self.assertEqual(resource, resp.content)
+        self.assertEqual(resource.content, resp.content)
 
 
 class FindWithReTest(unittest.TestCase):

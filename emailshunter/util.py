@@ -14,12 +14,15 @@ RE_EMAIL = r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)"
 RE_URL = r"(http|ftp|https)://([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?"
 
 
-def get_resource(uri, timeout=None):
+def get_resource(uri, timeout=None, head_request=False):
     '''Return resource from given uri.'''
-    resp = requests.get(uri, timeout=timeout)
+    if head_request:
+        resp = requests.head(uri, timeout=timeout)
+    else:
+        resp = requests.get(uri, timeout=timeout)
     if resp.status_code != 200:
         resp.raise_for_status()
-    return resp.content
+    return resp
 
 
 def find_with_re(text, pattern):
@@ -28,12 +31,11 @@ def find_with_re(text, pattern):
     return (match.group() for match in rpattern.finditer(text))
 
 
-def find_with_bs(text, tag, attr=None):
+def find_with_bs(soup, tag, attr=None):
     '''
     Return an iterator over all non-overlapping tags/attr in the page. When attr
     is not null return the value of the attr, otherwise the value of the tag.
     '''
-    soup = BeautifulSoup(text, "html.parser")
     tags = soup.find_all(tag)
     return ((not attr and tag) or tag.get(attr, None) for tag in tags)
 
@@ -53,6 +55,16 @@ def url_fix(s, charset='utf-8'):
     path = urlparse.quote(path, '/%')
     qs = urlparse.quote_plus(qs, ':&=')
     return urlparse.urlunsplit((scheme, netloc, path, qs, anchor))
+
+
+def normalize_url(url, charset="utf-8"):
+    '''Normalize url. Get rid of query and anchor.'''
+    if isinstance(url, bytes):
+        url = url.decode(charset, errors="ignore")
+    scheme, netloc, path, qs, anchor = urlparse.urlsplit(url)
+    path = urlparse.quote(path, "/%")
+    if path == "": path = "/"
+    return urlparse.urlunsplit((scheme, netloc, path, qs, None))
 
 
 def load_module(name, attach = False, force_reload = True):

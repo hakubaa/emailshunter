@@ -13,3 +13,24 @@ class WebsiteTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.app_context.pop()
+
+    def mock_get_resource(self, mock):
+        def get_resource(url, head_request=False):
+            if head_request:
+                response = self.client.head(url)
+            else:
+                response = self.client.get(url)
+            if response.status_code != 200:
+                raise Exception("HTTP ERROR")
+            response.content = response.data
+            return response
+        mock.side_effect = get_resource        
+        return mock
+
+    def mock_requests_get(self, mock):
+        def requests_get(*args, **kwargs):
+            response = self.client.get(url)
+            response.content = response.data
+            return response
+        mock.side_effect = requests_get
+        return mock

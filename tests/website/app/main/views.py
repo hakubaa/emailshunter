@@ -12,6 +12,10 @@ def index():
 def fake(name):
     return render_template("fake.html", name=name)
 
+@main.route("/fake/<name>/articles")
+def articles(name):
+    return render_template("art.html", name=name)
+
 @main.route("/test", methods=["GET"])
 def test():
     return render_template("test.html")
