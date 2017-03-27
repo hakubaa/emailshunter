@@ -110,3 +110,93 @@ class WebGraphTest(unittest.TestCase):
         wg.add_relation(p1, p2)
         self.assertIn(p2, wg.graph[p1])
         self.assertIn(p1, wg.graph[p2])
+
+    def test_add_relation_does_not_recreate_pages(self):
+        p1 = WebPage("test1", load_page=False)
+        p2 = WebPage("test2", load_page=False)
+        wg = WebGraph()
+        wg.add_page(p1)
+        wg.add_page(p2)
+        wg.add_relation(p1, p2)
+        self.assertEqual(len(wg), 2)
+
+    def test_get_page_creates_new_page_for_new_url(self):
+        wg = WebGraph()
+        page = wg.get_page("http://localhost:5000/")
+        self.assertEqual(page.url, "http://localhost:5000/")
+
+    def test_get_page_returns_None_create_new_is_turn_off(self):
+        wg = WebGraph()
+        page = wg.get_page("http://localhost:5000/", create_new=False)
+        self.assertIsNone(page)
+
+    def test_get_page_returns_correct_page(self):
+        wg = WebGraph()
+        wg.add_page(WebPage("http://localhost:5000/test", load_page=False))
+        wg.add_page(WebPage("http://localhost:5000/home", load_page=False))
+        page = wg.get_page("http://localhost:5000/test", create_new=False)
+        self.assertIsNotNone(page)
+
+    def test_get_page_with_getitem_operator(self):
+        wg = WebGraph()
+        p1 = wg.add_page(WebPage("http://localhost:5000/test", load_page=False))
+        p2 = wg.add_page(WebPage("http://localhost:5000/home", load_page=False))       
+        self.assertEqual(wg["http://localhost:5000/test"], p1)
+        self.assertEqual(wg[p2], p2)
+
+    def test_add_page_adds_new_page(self):
+        wg = WebGraph()
+        page = wg.add_page(WebPage("http://localhost:5000/test", 
+                                   load_page=False))
+        self.assertEqual(page, wg.get_page("http://localhost:5000/test"))
+
+    def test_add_page_called_with_parent_adds_relation_between_pages(self):
+        wg = WebGraph()
+        root = WebPage(url="http://localhost:5000/", load_page=False)
+        page = wg.add_page("http://localhost:5000/test", parent=root)
+        self.assertIn(root, wg.graph[page])
+        self.assertIn(page, wg.graph[root])
+
+    def test_for_presence_of_page_in_graph(self):
+        wg = WebGraph()
+        p1 = wg.add_page(WebPage("http://localhost:5000/test", load_page=False))
+        p2 = WebPage("http://localhost:5000/home", load_page=False)
+        self.assertTrue("http://localhost:5000/test" in wg)
+        self.assertTrue(p1 in wg)
+        self.assertFalse(p2 in wg)
+
+    def test_find_path_returns_None_when_page_not_in_graph(self):
+        wg = WebGraph()
+        p1 = wg.add_page(WebPage("http://localhost:5000/test", load_page=False))
+        p2 = WebPage("http://localhost:5000/home", load_page=False)
+        self.assertIsNone(wg.find_path(p1, p2))
+
+    def test_path_between_directly_related_pages_contains_only_them(self):
+        wg = WebGraph()
+        p1 = wg.add_page(WebPage("http://localhost:5000/test", load_page=False))
+        p2 = wg.add_page(WebPage("http://localhost:5000/home", load_page=False))
+        wg.add_relation(p1, p2)
+        path = wg.find_path(p1, p2)
+        self.assertCountEqual(path, (p1, p2))
+
+    def test_find_path_finds_indirect_paths(self):
+        wg = WebGraph()
+        p1 = wg.add_page(WebPage("http://localhost:5000/test", load_page=False))
+        p2 = wg.add_page(WebPage("http://localhost:5000/home", load_page=False))
+        p3 = wg.add_page(WebPage("http://localhost:5000/new", load_page=False))
+        wg.add_relation(p1, p2)
+        wg.add_relation(p2, p3)
+        self.assertEqual(len(wg), 3)
+        path = wg.find_path(p1, p3)
+        self.assertCountEqual(path, (p1, p2, p3))
+
+    def test_find_path_returns_None_when_no_path(self):
+        wg = WebGraph()
+        p1 = wg.add_page(WebPage("http://localhost:5000/test", load_page=False))
+        p2 = wg.add_page(WebPage("http://localhost:5000/home", load_page=False))
+        p3 = wg.add_page(WebPage("http://localhost:5000/next", load_page=False))
+        p4 = wg.add_page(WebPage("http://localhost:5000/prev", load_page=False))
+        wg.add_relation(p1, p2)
+        wg.add_relation(p3, p4)
+        path = wg.find_path(p1, p4)
+        self.assertIsNone(path)
