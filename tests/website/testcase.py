@@ -29,7 +29,7 @@ class WebsiteTestCase(unittest.TestCase):
 
     def mock_requests_get(self, mock):
         def requests_get(*args, **kwargs):
-            response = self.client.get(url)
+            response = self.client.get(*args)
             response.content = response.data
             return response
         mock.side_effect = requests_get

@@ -72,6 +72,7 @@ class FindEmailsAndUrlsTest(unittest.TestCase):
             </body>
             </html>
         """
+        response.encoding = "utf-8"
         response.headers = {"Content-Type": "text/html"}
         get_mock.return_value = response
         page = WebPage("http://localhost:5000", load_page=False)
@@ -92,6 +93,7 @@ class FindEmailsAndUrlsTest(unittest.TestCase):
             </body>
             </html>
         """
+        response.encoding = "utf-8"
         response.headers = {"Content-Type": "text/html"}
         get_mock.return_value = response
         page = WebPage("http://localhost:5000", load_page=False)
@@ -200,3 +202,37 @@ class WebGraphTest(unittest.TestCase):
         wg.add_relation(p3, p4)
         path = wg.find_path(p1, p4)
         self.assertIsNone(path)
+
+    def test_find_paths_finds_the_shortest_path(self):
+        wg = WebGraph()
+        p1 = wg.add_page(WebPage("http://localhost:5000/test", load_page=False))
+        p2 = wg.add_page(WebPage("http://localhost:5000/home", load_page=False))
+        p3 = wg.add_page(WebPage("http://localhost:5000/next", load_page=False))
+        p4 = wg.add_page(WebPage("http://localhost:5000/prev", load_page=False))
+        p5 = wg.add_page(WebPage("http://localhost:5000/back", load_page=False))
+        wg.add_relation(p1, p2)
+        wg.add_relation(p2, p3)
+        wg.add_relation(p3, p4)
+        wg.add_relation(p4, p5)
+        wg.add_relation(p1, p4)
+        path = wg.find_path(p1, p5)
+        self.assertCountEqual(path, (p1, p4, p5))
+
+    def test_find_nearest_neighbours_returns_closest_pages(self):
+        wg = WebGraph()
+        p = [wg.add_page(WebPage("fake %d" % i, load_page=False)) for i in range(7)]
+        '''
+          / 1 - 2 - 3
+        0           |
+          \ 4 - 5 - 6
+        '''
+        wg.add_relation(p[0], p[1])
+        wg.add_relation(p[1], p[2])
+        wg.add_relation(p[2], p[3])
+        wg.add_relation(p[0], p[4])
+        wg.add_relation(p[4], p[5])
+        wg.add_relation(p[5], p[6])
+        wg.add_relation(p[3], p[6])
+        pages = wg.find_nearest_neighbours(p[0], max_dist=2)
+        pages = [ page for page, dist in pages ]
+        self.assertCountEqual(pages, [p[1], p[2], p[4], p[5]])    

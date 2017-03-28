@@ -12,6 +12,7 @@ class WebPage:
 
     def __init__(self, url, load_page=True, params=None, **kwargs):
         self._url = util.normalize_url(url)
+        self.loaded = False
         if load_page:
             self.reload(params=params, **kwargs)
 
@@ -21,20 +22,27 @@ class WebPage:
     def __eq__(self, other):
         return self._url == other._url
 
+    def __repr__(self):
+        return "WebPage(url={!r}, load_page={!r})".format(self._url, bool(self))
+
     @property
     def url(self):
         return self._url
 
-    def reload(self, params=None, **kwargs):
+    def reload(self, params=None, head_request=False, **kwargs):
         '''Reload webpage and updates links & emails.'''
-        self._response = requests.get(self._url, params=params, **kwargs)
+        if head_request:
+            self._response = requests.head(self._url, params=params, **kwargs)
+        else:
+            self._response = requests.get(self._url, params=params, **kwargs)
+            self.loaded = True
 
     def __getattr__(self, attr):
         '''Redirects attributes getter to response.'''
         if hasattr(self, "_response") and hasattr(self._response, attr):
                 return getattr(self._response, attr)
-        raise AttributeError("'%r' object has no attribute '%s', "
-                             "try to reload the page." % (self, attr))
+        raise AttributeError("WebPage object has no attribute '%s', "
+                             "try to reload the page." % attr)
 
 
 class WebGraph:
@@ -54,9 +62,52 @@ class WebGraph:
         if not p1 in self.pages: self.pages[p1] = p1
         if not p2 in self.pages: self.pages[p2] = p2
 
+    def find_nearest_neighbours(self, page, max_dist, with_dist=True):
+        ''' 
+        Searches for the neighbours of the page within defined distance. Returns 
+        list of tuples (page, distance).
+        '''
+
+        # Ensure page is a WebPage.
+        if not isinstance(page, WebPage):
+            page = self._url2webpage(page)
+
+        # Return None when page does not exist.
+        if page not in self:
+            return None    
+
+        # Return empty list if no direct neightbours
+        if page not in self.graph:  
+            return []
+
+        page2visit = set((page,))
+        visited = set()
+        dists = { page: 0 }
+        neighbours = set()
+
+        while page2visit:
+            current = page2visit.pop()
+            visited.add(current)
+
+            current_dist = dists[current]
+            for page in (self.graph[current] - visited):
+                alt = current_dist + 1
+                if alt <= max_dist:
+                    neighbours.add(page)
+                if alt < max_dist:
+                    page2visit.add(page)
+                if not page in dists or alt < dists[page]:
+                    dists[page] = alt                            
+
+        if with_dist:
+            return [(page, dists[page]) for page in neighbours]
+        else:
+            return list(neighbours)
+
+
     def find_path(self, pstart, pend):
         '''
-        Looks for the shorthest path between two pages. Returns tuple containing
+        Searches for the shorthest path between two pages. Returns tuple containing
         consequtive pages in the path or None if there is not path.
         '''
 
@@ -133,8 +184,8 @@ class WebGraph:
             self.add_relation(obj, parent)
         return obj
 
-    def _url2webpage(self, url):
-        return WebPage(url=util.normalize_url(url), load_page=False)
+    def _url2webpage(self, url, load_page=False):
+        return WebPage(url=util.normalize_url(url), load_page=load_page)
 
     def __contains__(self, page):
         if not isinstance(page, WebPage):
@@ -152,7 +203,16 @@ class WebGraph:
 
 def find_urls(page, normalize=True):
     '''Extracts all the URLs found within a page.'''
-    soup = BeautifulSoup(page.content, "html.parser")
+
+    # content_type = page.headers.get("Content-Type", None)
+    # if not (content_type and content_type.startswith("text")):
+    #     raise ValueError("improper content-type '%s'" % content_type)
+
+    content = page.content
+    content = content.decode(getattr(page, "encoding", "utf-8"), 
+                             errors="ignore")
+
+    soup = BeautifulSoup(content, "html.parser")
     urls = list(set(itertools.chain(
         util.find_with_re(str(soup), util.RE_URL),
         filter(
@@ -166,6 +226,15 @@ def find_urls(page, normalize=True):
 
 def find_emails(page):
     '''Extracts all the emails found within a page.'''
-    soup = BeautifulSoup(page.content, "html.parser")
+
+    # content_type = page.headers.get("Content-Type", None)
+    # if not (content_type and content_type.startswith("text")):
+    #     raise ValueError("improper content-type '%s'" % content_type)
+
+    content = page.content
+    content = content.decode(getattr(page, "encoding", "utf-8"), 
+                             errors="ignore")
+
+    soup = BeautifulSoup(content, "html.parser")
     emails = list(set(util.find_with_re(str(soup), util.RE_EMAIL)))
     return emails
