@@ -14,17 +14,6 @@ RE_EMAIL = r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)"
 RE_URL = r"(http|ftp|https)://([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?"
 
 
-def get_resource(uri, timeout=None, head_request=False):
-    '''Return resource from given uri.'''
-    if head_request:
-        resp = requests.head(uri, timeout=timeout)
-    else:
-        resp = requests.get(uri, timeout=timeout)
-    if resp.status_code != 200:
-        resp.raise_for_status()
-    return resp
-
-
 def find_with_re(text, pattern):
     '''Return an iterator over all non-overlapping matches in the text.'''
     rpattern = re.compile(pattern)

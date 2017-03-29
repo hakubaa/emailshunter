@@ -4,7 +4,7 @@ from queue import PriorityQueue
 import requests
 from bs4 import BeautifulSoup
 
-import emailshunter.util as util
+import crawlengine.util as util
 
 
 class WebPage:
@@ -23,7 +23,9 @@ class WebPage:
         return self._url == other._url
 
     def __repr__(self):
-        return "WebPage(url={!r}, load_page={!r})".format(self._url, bool(self))
+        return "WebPage(url={!r}, load_page={!r})".format(
+            self._url, bool(self.loaded)
+        )
 
     @property
     def url(self):
@@ -52,13 +54,17 @@ class WebGraph:
         self.graph = dict()
         self.pages = dict()
 
-    def add_relation(self, p1, p2):
+    def add_relation(self, p1, p2, directed=True):
         '''
         Add relation between pages to graph. Force using keyword parameters 
         to avoid mistakes.
         '''
         self.graph.setdefault(p1, set()).add(p2)
-        self.graph.setdefault(p2, set()).add(p1)
+        if not directed:
+            self.graph.setdefault(p2, set()).add(p1)
+        else:
+            if p2 not in self.graph: self.graph[p2] = set()
+
         if not p1 in self.pages: self.pages[p1] = p1
         if not p2 in self.pages: self.pages[p2] = p2
 
@@ -181,7 +187,7 @@ class WebGraph:
             obj = self._url2webpage(obj)
         self.pages[obj] = obj
         if parent:
-            self.add_relation(obj, parent)
+            self.add_relation(parent, obj)
         return obj
 
     def _url2webpage(self, url, load_page=False):

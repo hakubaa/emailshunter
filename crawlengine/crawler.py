@@ -5,8 +5,8 @@ import requests
 
 from requests.exceptions import RequestException
 
-from emailshunter.webpage import find_urls, find_emails, WebPage, WebGraph
-from emailshunter.util import url_fix, fmap
+from crawlengine.webpage import find_urls, find_emails, WebPage, WebGraph
+from crawlengine.util import url_fix, fmap
 
 
 SearchResult = namedtuple("SearchResult", "page urls emails")
@@ -72,6 +72,9 @@ class SearchManager:
         self.visited.add(page)
 
     def search(self, root_page, max_depth, within_domain=True):
+
+        print("\nPress CTRL+C to stop the script.\n")
+
         # Set filters
         filters = self.external_filters
         if within_domain:
@@ -82,6 +85,7 @@ class SearchManager:
         with futures.ThreadPoolExecutor(self.max_workers) as executor:
             # Submit crawler for root_page
             pages_in_progress[root_page] = executor.submit(root_page.reload)
+
             try:
                 while pages_in_progress:
                     # Collect results
@@ -104,7 +108,8 @@ class SearchManager:
 
                     if pages2visit:
                         # Apply filters
-                        pages2visit = set(pages2visit) - self.visited - set(pages_in_progress)
+                        pages2visit = set(pages2visit) - self.visited - \
+                                      set(pages_in_progress)
                         pages2visit = (page for page in pages2visit 
                                            if all(fmap(page, *filters)))
                         for page in pages2visit:
@@ -119,3 +124,19 @@ class SearchManager:
                     if future.done():
                         print("COMPLETE: {!r}.".format(page))
                         self._update_internals(page)
+
+
+def avoid_extensions(exts=["bmp", "jpeg", "jpg", "pdf", "php", "css", "js", 
+                           "ico", "png"]):
+    def _filter(page):
+        _, _, path, *_ = urlparse.urlsplit(page.url)
+        return all(map(lambda ext: not path.endswith(ext), exts))
+    return _filter
+
+
+def avoid_urls_matching(pattern):
+    def _filter(page):
+        if not re.match(pattern, page.url):
+            return True
+        return False
+    return _filter

@@ -2,7 +2,7 @@ import unittest
 
 from flask import current_app, url_for
 
-from emailshunter import util
+from crawlengine import util
 
 from .website.app import create_app
 from .website import WebsiteTestCase

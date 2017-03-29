@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch, Mock
 
-from emailshunter.webpage import WebPage, WebGraph, find_urls, find_emails
+from crawlengine.webpage import WebPage, WebGraph, find_urls, find_emails
 
 
 def patch_requests_get(pass_mock=False):
@@ -19,9 +19,16 @@ def patch_requests_get(pass_mock=False):
     return _wrapper
 
 
-@patch("emailshunter.webpage.requests.get")
+@patch("requests.get")
 class TestWebPage(unittest.TestCase):
     
+    @patch_requests_get()
+    def test_for_creating_webpage_from_repr(self):
+        p1 = WebPage("http://www.test.page.com", load_page=False)
+        p2 = eval(repr(p1))
+        self.assertEqual(p2.url, p1.url)
+        self.assertFalse(p2.loaded)
+
     @patch_requests_get()
     def test_pages_with_the_same_url_have_similar_hash(self):
         p1 = WebPage("http://www.test.page.com")
@@ -50,14 +57,26 @@ class TestWebPage(unittest.TestCase):
         p1 = WebPage("http://localhost:5000", load_page=False)
         self.assertFalse(get_mock.called)
 
-    @patch_requests_get(True)
-    def test_reload_sets_content_and_headers_attribute(self, get_mock):
+    @patch_requests_get()
+    def test_reload_sets_content_and_headers_attribute(self):
         page = WebPage("http://localhost:5000")
         self.assertEqual(page.content, b"<html></html>")
         self.assertEqual(page.headers, {"Content-Type": "text/html"})
 
+    @patch_requests_get()
+    @patch("requests.head")
+    def test_reload_only_headers(self, head_mock):
+        response = Mock()
+        response.content = b""
+        response.headers = {"Content-Type": "text/html"}
+        head_mock.return_value = response
+        page = WebPage("http://localhost:5000", load_page=False)
+        page.reload(head_request=True)
+        self.assertEqual(page.content, b"")
+        self.assertEqual(page.headers, {"Content-Type": "text/html"})
 
-@patch("emailshunter.webpage.requests.get")
+
+@patch("crawlengine.webpage.requests.get")
 class FindEmailsAndUrlsTest(unittest.TestCase):
 
     @patch_requests_get(True)
@@ -109,7 +128,7 @@ class WebGraphTest(unittest.TestCase):
         p1 = WebPage("test1", load_page=False)
         p2 = WebPage("test2", load_page=False)
         wg = WebGraph()
-        wg.add_relation(p1, p2)
+        wg.add_relation(p1, p2, directed=False)
         self.assertIn(p2, wg.graph[p1])
         self.assertIn(p1, wg.graph[p2])
 
@@ -119,7 +138,7 @@ class WebGraphTest(unittest.TestCase):
         wg = WebGraph()
         wg.add_page(p1)
         wg.add_page(p2)
-        wg.add_relation(p1, p2)
+        wg.add_relation(p1, p2, directed=False)
         self.assertEqual(len(wg), 2)
 
     def test_get_page_creates_new_page_for_new_url(self):
@@ -157,7 +176,6 @@ class WebGraphTest(unittest.TestCase):
         root = WebPage(url="http://localhost:5000/", load_page=False)
         page = wg.add_page("http://localhost:5000/test", parent=root)
         self.assertIn(root, wg.graph[page])
-        self.assertIn(page, wg.graph[root])
 
     def test_for_presence_of_page_in_graph(self):
         wg = WebGraph()
@@ -177,7 +195,7 @@ class WebGraphTest(unittest.TestCase):
         wg = WebGraph()
         p1 = wg.add_page(WebPage("http://localhost:5000/test", load_page=False))
         p2 = wg.add_page(WebPage("http://localhost:5000/home", load_page=False))
-        wg.add_relation(p1, p2)
+        wg.add_relation(p1, p2, directed=False)
         path = wg.find_path(p1, p2)
         self.assertCountEqual(path, (p1, p2))
 
@@ -186,8 +204,8 @@ class WebGraphTest(unittest.TestCase):
         p1 = wg.add_page(WebPage("http://localhost:5000/test", load_page=False))
         p2 = wg.add_page(WebPage("http://localhost:5000/home", load_page=False))
         p3 = wg.add_page(WebPage("http://localhost:5000/new", load_page=False))
-        wg.add_relation(p1, p2)
-        wg.add_relation(p2, p3)
+        wg.add_relation(p1, p2, directed=False)
+        wg.add_relation(p2, p3, directed=False)
         self.assertEqual(len(wg), 3)
         path = wg.find_path(p1, p3)
         self.assertCountEqual(path, (p1, p2, p3))
@@ -198,8 +216,8 @@ class WebGraphTest(unittest.TestCase):
         p2 = wg.add_page(WebPage("http://localhost:5000/home", load_page=False))
         p3 = wg.add_page(WebPage("http://localhost:5000/next", load_page=False))
         p4 = wg.add_page(WebPage("http://localhost:5000/prev", load_page=False))
-        wg.add_relation(p1, p2)
-        wg.add_relation(p3, p4)
+        wg.add_relation(p1, p2, directed=False)
+        wg.add_relation(p3, p4, directed=False)
         path = wg.find_path(p1, p4)
         self.assertIsNone(path)
 
@@ -210,11 +228,11 @@ class WebGraphTest(unittest.TestCase):
         p3 = wg.add_page(WebPage("http://localhost:5000/next", load_page=False))
         p4 = wg.add_page(WebPage("http://localhost:5000/prev", load_page=False))
         p5 = wg.add_page(WebPage("http://localhost:5000/back", load_page=False))
-        wg.add_relation(p1, p2)
-        wg.add_relation(p2, p3)
-        wg.add_relation(p3, p4)
-        wg.add_relation(p4, p5)
-        wg.add_relation(p1, p4)
+        wg.add_relation(p1, p2, directed=False)
+        wg.add_relation(p2, p3, directed=False)
+        wg.add_relation(p3, p4, directed=False)
+        wg.add_relation(p4, p5, directed=False)
+        wg.add_relation(p1, p4, directed=False)
         path = wg.find_path(p1, p5)
         self.assertCountEqual(path, (p1, p4, p5))
 
@@ -226,13 +244,13 @@ class WebGraphTest(unittest.TestCase):
         0           |
           \ 4 - 5 - 6
         '''
-        wg.add_relation(p[0], p[1])
-        wg.add_relation(p[1], p[2])
-        wg.add_relation(p[2], p[3])
-        wg.add_relation(p[0], p[4])
-        wg.add_relation(p[4], p[5])
-        wg.add_relation(p[5], p[6])
-        wg.add_relation(p[3], p[6])
+        wg.add_relation(p[0], p[1], directed=False)
+        wg.add_relation(p[1], p[2], directed=False)
+        wg.add_relation(p[2], p[3], directed=False)
+        wg.add_relation(p[0], p[4], directed=False)
+        wg.add_relation(p[4], p[5], directed=False)
+        wg.add_relation(p[5], p[6], directed=False)
+        wg.add_relation(p[3], p[6], directed=False)
         pages = wg.find_nearest_neighbours(p[0], max_dist=2)
         pages = [ page for page, dist in pages ]
         self.assertCountEqual(pages, [p[1], p[2], p[4], p[5]])    

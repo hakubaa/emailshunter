@@ -1,10 +1,10 @@
 import unittest
 from unittest.mock import patch, Mock
 
-from emailshunter import util
+from crawlengine import util
 
 
-@patch("emailshunter.util.requests.get") 
+@patch("crawlengine.util.requests.get") 
 class GetResourceTest(unittest.TestCase):
 
     def test_for_calling_request_method_with_correct_uri(self, get_mock):
