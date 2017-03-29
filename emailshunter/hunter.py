@@ -23,10 +23,14 @@ def update_netloc(root_url, url):
     return url
 
 
-def search_webpage(page, force_reload=False, head_first=True):
+def search_webpage(page):
     '''Search webpage for emails and urls. Returns dict with found items.'''
-    if not page.loaded or force_reload:
-        page.reload()
+    if not page.loaded:
+        raise ValueError("empty WebPage object, reload required")
+
+    content_type = page.headers.get("Content-Type", None)
+    if not (content_type and content_type.startswith("text")):
+        return SearchResult(page=page, urls=list(), emails=list())
 
     urls = [update_netloc(page.url, url) for url in find_urls(page)]
     emails = find_emails(page)
@@ -55,16 +59,8 @@ class SearchManager:
                 return False
         return _filter
 
-    def _search_wrapper(self, page):
+    def _update_internals(self, page):
         '''Search webpage and updage webgraph.'''
-        # Verify content-type
-        if not page.loaded:
-            page.reload(head_request=True)
-              
-        content_type = page.headers.get("Content-Type", None)
-        if not (content_type and content_type.startswith("text")):
-            return SearchResult(page=page, urls=list(), emails=list())
-
         result = search_webpage(page)
 
         # Update webgraph
@@ -75,36 +71,31 @@ class SearchManager:
         self.emails |= set(result.emails)
         self.visited.add(page)
 
-        return result
-
     def search(self, root_page, max_depth, within_domain=True):
         # Set filters
         filters = self.external_filters
         if within_domain:
             filters.append(self._filter_within_domain(root_page.url))
 
-        # Submit hunter for root_page
-        hunters = dict()
+        pages_in_progress = dict()
 
         with futures.ThreadPoolExecutor(self.max_workers) as executor:
-            
-            hunters[root_page] = executor.submit(self._search_wrapper, root_page)
-
+            # Submit crawler for root_page
+            pages_in_progress[root_page] = executor.submit(root_page.reload)
             try:
-                while hunters:
-
+                while pages_in_progress:
                     # Collect results
                     results = []
-                    hunters2del = []
-                    for key in hunters:
-                        hunter = hunters[key]
-                        if hunter.done():
-                            print("Hunter '%s' done (%d hunters still loose)." % 
-                                  (hunter, len(hunters)))
-                            hunters2del.append(key)
+                    pages_done = []
+                    for page in pages_in_progress:
+                        future = pages_in_progress[page]
+                        if future.done():
+                            print("COMPLETE: {!r}.".format(page))
+                            self._update_internals(page)
+                            pages_done.append(page)
 
-                    for key in hunters2del:
-                        del hunters[key]
+                    for page in pages_done:
+                        del pages_in_progress[page]
 
                     # Check for new pages to visist
                     pages2visit = self.webgraph.find_nearest_neighbours(
@@ -113,13 +104,18 @@ class SearchManager:
 
                     if pages2visit:
                         # Apply filters
-                        pages2visit = set(pages2visit) - self.visited
+                        pages2visit = set(pages2visit) - self.visited - set(pages_in_progress)
                         pages2visit = (page for page in pages2visit 
                                            if all(fmap(page, *filters)))
                         for page in pages2visit:
-                            hunters[page] = executor.submit(self._search_wrapper, page)
+                            pages_in_progress[page] = executor.submit(page.reload)
 
             except KeyboardInterrupt:
-                import pdb; pdb.set_trace(  )
-
-        return 1
+                print("Waiting for running task to complete ...")
+                # Stop executor and collect results
+                executor.shutdown()
+                for page in pages_in_progress:
+                    future = pages_in_progress[page]
+                    if future.done():
+                        print("COMPLETE: {!r}.".format(page))
+                        self._update_internals(page)
