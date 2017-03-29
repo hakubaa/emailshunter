@@ -1,0 +1,9 @@
+Flask==0.12
+Jinja2==2.9.5
+MarkupSafe==1.0
+Werkzeug==0.12.1
+beautifulsoup4==4.5.3
+click==6.7
+coverage==4.3.4
+itsdangerous==0.24
+requests==2.13.0
