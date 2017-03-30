@@ -162,8 +162,8 @@ class WebGraphTest(unittest.TestCase):
         wg = WebGraph()
         p1 = wg.add_page(WebPage("http://localhost:5000/test", load_page=False))
         p2 = wg.add_page(WebPage("http://localhost:5000/home", load_page=False))       
-        self.assertEqual(wg["http://localhost:5000/test"], p1)
-        self.assertEqual(wg[p2], p2)
+        self.assertEqual(wg.get_page("http://localhost:5000/test"), p1)
+        self.assertEqual(wg.get_page(p2), p2)
 
     def test_add_page_adds_new_page(self):
         wg = WebGraph()
@@ -175,7 +175,7 @@ class WebGraphTest(unittest.TestCase):
         wg = WebGraph()
         root = WebPage(url="http://localhost:5000/", load_page=False)
         page = wg.add_page("http://localhost:5000/test", parent=root)
-        self.assertIn(root, wg.graph[page])
+        self.assertIn(page, wg.graph[root])
 
     def test_for_presence_of_page_in_graph(self):
         wg = WebGraph()

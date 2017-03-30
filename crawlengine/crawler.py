@@ -1,7 +1,11 @@
 from concurrent import futures
-import urllib.parse as urlparse
 from collections import namedtuple
+import urllib.parse as urlparse
 import requests
+import pdb
+import csv
+import operator
+from functools import reduce
 
 from requests.exceptions import RequestException
 
@@ -39,12 +43,12 @@ def search_webpage(page):
 
 class SearchManager:
 
-    def __init__(self, max_workers=None, webgraph=None):
+    def __init__(self, max_workers=1, webgraph=None, callback=None):
         self.webgraph = webgraph or WebGraph()
-        self.emails = set()
-        self.visited = set()
+        self._emails = dict()
         self.max_workers = max_workers
         self.external_filters = []
+        self.callback = callback
 
     def add_filter(self, filter):
         self.external_filters.append(filter)
@@ -62,44 +66,45 @@ class SearchManager:
     def _update_internals(self, page):
         '''Search webpage and updage webgraph.'''
         result = search_webpage(page)
-
-        # Update webgraph
         for url in result.urls:
             self.webgraph.add_page(url, parent=page)
+        self._emails.setdefault(page, set()).update(result.emails)
 
-        # Update datasets
-        self.emails |= set(result.emails)
-        self.visited.add(page)
+    @property
+    def visited(self):
+        return self._emails.keys()
+
+    @property
+    def emails(self):
+        return reduce(operator.or_, self._emails.values(), set())
+
+    def __getitem__(self, page):
+        return self._emails[page]
+
+    def _submit_worker(self, page, executor):
+        future = executor.submit(page.reload)
+        if self.callback:
+            future.add_done_callback(self.callback)
+        return future
 
     def search(self, root_page, max_depth, within_domain=True):
-
-        print("\nPress CTRL+C to stop the script.\n")
 
         # Set filters
         filters = self.external_filters
         if within_domain:
             filters.append(self._filter_within_domain(root_page.url))
 
-        pages_in_progress = dict()
+        workers = dict()
 
         with futures.ThreadPoolExecutor(self.max_workers) as executor:
-            # Submit crawler for root_page
-            pages_in_progress[root_page] = executor.submit(root_page.reload)
-
+            workers[root_page] = self._submit_worker(root_page, executor)
             try:
-                while pages_in_progress:
-                    # Collect results
-                    results = []
-                    pages_done = []
-                    for page in pages_in_progress:
-                        future = pages_in_progress[page]
+                while workers:
+                    # Collect pages
+                    for page, future in list(workers.items()):
                         if future.done():
-                            print("COMPLETE: {!r}.".format(page))
                             self._update_internals(page)
-                            pages_done.append(page)
-
-                    for page in pages_done:
-                        del pages_in_progress[page]
+                            del workers[page]
 
                     # Check for new pages to visist
                     pages2visit = self.webgraph.find_nearest_neighbours(
@@ -108,21 +113,16 @@ class SearchManager:
 
                     if pages2visit:
                         # Apply filters
-                        pages2visit = set(pages2visit) - self.visited - \
-                                      set(pages_in_progress)
+                        pages2visit = set(pages2visit) - self.visited - set(workers)
                         pages2visit = (page for page in pages2visit 
                                            if all(fmap(page, *filters)))
                         for page in pages2visit:
-                            pages_in_progress[page] = executor.submit(page.reload)
+                            workers[page] = self._submit_worker(page, executor)
 
             except KeyboardInterrupt:
-                print("Waiting for running task to complete ...")
-                # Stop executor and collect results
                 executor.shutdown()
-                for page in pages_in_progress:
-                    future = pages_in_progress[page]
+                for page, future in workers.items():
                     if future.done():
-                        print("COMPLETE: {!r}.".format(page))
                         self._update_internals(page)
 
 
@@ -140,3 +140,14 @@ def avoid_urls_matching(pattern):
             return True
         return False
     return _filter
+
+
+def save_to_csv(path, manager):
+    '''Save emails & pages visited by crawler to csv file.'''
+    with open(path, "w", newline="") as csvfile:
+        writer = csv.writer(csvfile, delimiter=";", quotechar="|", 
+                            quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(("page", "email"))
+        for page in manager.visited:
+            for email in manager[page]:
+                writer.writerow((page.url, email))

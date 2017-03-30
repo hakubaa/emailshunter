@@ -1,5 +1,6 @@
 import itertools
 from queue import PriorityQueue
+import csv
 
 import requests
 from bs4 import BeautifulSoup
@@ -38,6 +39,7 @@ class WebPage:
         else:
             self._response = requests.get(self._url, params=params, **kwargs)
             self.loaded = True
+        return self
 
     def __getattr__(self, attr):
         '''Redirects attributes getter to response.'''
@@ -52,7 +54,7 @@ class WebGraph:
     
     def __init__(self):
         self.graph = dict()
-        self.pages = dict()
+        self.pages = set()
 
     def add_relation(self, p1, p2, directed=True):
         '''
@@ -65,8 +67,7 @@ class WebGraph:
         else:
             if p2 not in self.graph: self.graph[p2] = set()
 
-        if not p1 in self.pages: self.pages[p1] = p1
-        if not p2 in self.pages: self.pages[p2] = p2
+        self.pages.update((p1, p2))
 
     def find_nearest_neighbours(self, page, max_dist, with_dist=True):
         ''' 
@@ -136,7 +137,7 @@ class WebGraph:
             return (pstart, pend)
 
         # Implementation of Dijkstra's algorithm
-        not_visited = set(self.pages)
+        not_visited = self.pages
         dists = { page: len(self)+1 for page in not_visited }
         dists[pstart] = 0
         prevs = { page: None for page in not_visited }
@@ -173,11 +174,21 @@ class WebGraph:
         Returns page with given url or creates new one if there is no page 
         with the url.
         '''
+        if isinstance(url, WebPage):
+            url = url.url
         url = util.normalize_url(url)
-        return self.pages.get(
-            WebPage(url, load_page=False), 
-            (create_new and WebPage(url=url, load_page=False) or None)
-        )
+
+        for page in self.pages:
+            if page.url == url:
+                return page
+        else:
+            if create_new:
+                return WebPage(url=url, load_page=False)
+
+        # return self.pages.get(
+        #     WebPage(url, load_page=False), 
+        #     (create_new and WebPage(url=url, load_page=False) or None)
+        # )
 
     def add_page(self, obj, parent=None):
         '''
@@ -185,7 +196,7 @@ class WebGraph:
         '''
         if not isinstance(obj, WebPage):
             obj = self._url2webpage(obj)
-        self.pages[obj] = obj
+        self.pages.add(obj)
         if parent:
             self.add_relation(parent, obj)
         return obj
@@ -198,22 +209,30 @@ class WebGraph:
             page = self._url2webpage(page)
         return page in self.pages
 
+    def __iter__(self):
+        return iter(self.pages)
+
     def __getitem__(self, page):
-        if not isinstance(page, WebPage):
-            page = self._url2webpage(page)
-        return self.pages[page]
+        return self.graph[page]
 
     def __len__(self):
         return len(self.pages)
 
+    def save_to_csv(self, path):
+        '''Save graph to csv file.'''
+        with open(path, "w", newline="") as csvfile:
+            writer = csv.writer(csvfile, delimiter=";", quotechar="|", 
+                                quoting=csv.QUOTE_MINIMAL)
+            writer.writerow(("from", "to"))
+            for page in self:
+                for subpage in self[page]:
+                    writer.writerow((page.url, subpage.url))
+
 
 def find_urls(page, normalize=True):
-    '''Extracts all the URLs found within a page.'''
-
-    # content_type = page.headers.get("Content-Type", None)
-    # if not (content_type and content_type.startswith("text")):
-    #     raise ValueError("improper content-type '%s'" % content_type)
-
+    '''
+    Extracts all the URLs found within a page.
+    '''
     content = page.content
     content = content.decode(getattr(page, "encoding", "utf-8"), 
                              errors="ignore")
@@ -231,12 +250,9 @@ def find_urls(page, normalize=True):
 
 
 def find_emails(page):
-    '''Extracts all the emails found within a page.'''
-
-    # content_type = page.headers.get("Content-Type", None)
-    # if not (content_type and content_type.startswith("text")):
-    #     raise ValueError("improper content-type '%s'" % content_type)
-
+    '''
+    Extracts all the emails found within a page.
+    '''
     content = page.content
     content = content.decode(getattr(page, "encoding", "utf-8"), 
                              errors="ignore")
